@@ -150,7 +150,7 @@ async def playing(
     ):
         await interaction.response.send_message(
             "Use this command inside a Discord server.",
-            ephemeral=True,
+            ephemeral=False,
         )
         return
 
@@ -159,7 +159,7 @@ async def playing(
     if not games:
         await interaction.response.send_message(
             "🎮 I don't currently detect a game.",
-            ephemeral=True,
+            ephemeral=False,
         )
         return
 
@@ -170,7 +170,7 @@ async def playing(
 
     await interaction.response.send_message(
         f"**Currently playing:**\n{game_list}",
-        ephemeral=True,
+        ephemeral=False,
     )
 
 
@@ -201,7 +201,7 @@ async def today(
     if not rows:
         await interaction.response.send_message(
             "🎮 No gaming sessions recorded today.",
-            ephemeral=True,
+            ephemeral=False,
         )
         return
 
@@ -216,7 +216,7 @@ async def today(
 
     await interaction.response.send_message(
         message,
-        ephemeral=True,
+        ephemeral=False,
     )
 
 
@@ -250,7 +250,7 @@ async def week(
     if not rows:
         await interaction.response.send_message(
             "🎮 No gaming sessions recorded this week.",
-            ephemeral=True,
+            ephemeral=False,
         )
         return
 
@@ -265,7 +265,7 @@ async def week(
 
     await interaction.response.send_message(
         message,
-        ephemeral=True,
+        ephemeral=False,
     )
 
 
