@@ -1,35 +1,22 @@
 import os
-from collections import defaultdict
-from datetime import datetime, timedelta, timezone
 
 import discord
-from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from database import (
-    get_sessions_between,
-    init_database,
+from database.game_session_repository import (
+    ensure_user,
     start_session,
     stop_session,
 )
+
 
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 if not TOKEN:
-    raise RuntimeError("DISCORD_TOKEN is missing from .env")
-
-
-intents = discord.Intents.default()
-intents.members = True
-intents.presences = True
-
-bot = commands.Bot(
-    command_prefix="!",
-    intents=intents,
-)
+    raise RuntimeError("DISCORD_TOKEN is missing")
 
 
 def get_games(member: discord.Member) -> set[str]:
@@ -41,65 +28,41 @@ def get_games(member: discord.Member) -> set[str]:
     }
 
 
-def format_duration(seconds: int) -> str:
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
+class GamingTrackerBot(commands.Bot):
+    async def setup_hook(self):
+        await self.load_extension(
+            "commands.playing"
+        )
 
-    if hours > 0:
-        return f"{hours}h {minutes}m"
+        await self.load_extension(
+            "commands.today"
+        )
 
-    return f"{minutes}m"
+        await self.load_extension(
+            "commands.week"
+        )
 
-
-def build_summary(rows) -> tuple[list[str], int]:
-    totals = defaultdict(int)
-    total_seconds = 0
-
-    now = datetime.now(timezone.utc)
-
-    for row in rows:
-        if row["duration_seconds"] is not None:
-            seconds = row["duration_seconds"]
-        else:
-            started_at = datetime.fromisoformat(row["started_at"])
-            seconds = int(
-                (now - started_at).total_seconds()
-            )
-
-        totals[row["game_name"]] += seconds
-        total_seconds += seconds
-
-    sorted_games = sorted(
-        totals.items(),
-        key=lambda item: item[1],
-        reverse=True,
-    )
-
-    lines = [
-        f"🎮 **{game}** — {format_duration(seconds)}"
-        for game, seconds in sorted_games
-    ]
-
-    return lines, total_seconds
-
-
-@bot.event
-async def on_ready():
-    init_database()
-
-    print(f"Connected as {bot.user}")
-
-    try:
-        synced = await bot.tree.sync()
+        synced = await self.tree.sync()
 
         print(
             f"Synced {len(synced)} slash commands."
         )
 
-    except Exception as error:
-        print(
-            f"Could not sync commands: {error}"
-        )
+
+intents = discord.Intents.default()
+intents.members = True
+intents.presences = True
+
+
+bot = GamingTrackerBot(
+    command_prefix="!",
+    intents=intents,
+)
+
+
+@bot.event
+async def on_ready():
+    print(f"Connected as {bot.user}")
 
 
 @bot.event
@@ -115,6 +78,15 @@ async def on_presence_update(
 
     started_games = after_games - before_games
     stopped_games = before_games - after_games
+
+    if not started_games and not stopped_games:
+        return
+
+    ensure_user(
+        discord_user_id=after.id,
+        username=after.name,
+        display_name=after.display_name,
+    )
 
     for game in started_games:
         print(
@@ -135,138 +107,6 @@ async def on_presence_update(
             discord_user_id=after.id,
             game_name=game,
         )
-
-
-@bot.tree.command(
-    name="playing",
-    description="Show the game Discord currently detects.",
-)
-async def playing(
-    interaction: discord.Interaction,
-):
-    if not isinstance(
-        interaction.user,
-        discord.Member,
-    ):
-        await interaction.response.send_message(
-            "Use this command inside a Discord server.",
-            ephemeral=False,
-        )
-        return
-
-    games = get_games(interaction.user)
-
-    if not games:
-        await interaction.response.send_message(
-            "🎮 I don't currently detect a game.",
-            ephemeral=False,
-        )
-        return
-
-    game_list = "\n".join(
-        f"🎮 {game}"
-        for game in sorted(games)
-    )
-
-    await interaction.response.send_message(
-        f"**Currently playing:**\n{game_list}",
-        ephemeral=False,
-    )
-
-
-@bot.tree.command(
-    name="today",
-    description="Show your gaming time today.",
-)
-async def today(
-    interaction: discord.Interaction,
-):
-    now = datetime.now(timezone.utc)
-
-    start = now.replace(
-        hour=0,
-        minute=0,
-        second=0,
-        microsecond=0,
-    )
-
-    end = start + timedelta(days=1)
-
-    rows = get_sessions_between(
-        interaction.user.id,
-        start,
-        end,
-    )
-
-    if not rows:
-        await interaction.response.send_message(
-            "🎮 No gaming sessions recorded today.",
-            ephemeral=False,
-        )
-        return
-
-    lines, total = build_summary(rows)
-
-    message = (
-        "## 🎮 Gaming today\n\n"
-        + "\n".join(lines)
-        + "\n\n"
-        + f"**Total: {format_duration(total)}**"
-    )
-
-    await interaction.response.send_message(
-        message,
-        ephemeral=False,
-    )
-
-
-@bot.tree.command(
-    name="week",
-    description="Show your gaming time this week.",
-)
-async def week(
-    interaction: discord.Interaction,
-):
-    now = datetime.now(timezone.utc)
-
-    start = (
-        now
-        - timedelta(days=now.weekday())
-    ).replace(
-        hour=0,
-        minute=0,
-        second=0,
-        microsecond=0,
-    )
-
-    end = start + timedelta(days=7)
-
-    rows = get_sessions_between(
-        interaction.user.id,
-        start,
-        end,
-    )
-
-    if not rows:
-        await interaction.response.send_message(
-            "🎮 No gaming sessions recorded this week.",
-            ephemeral=False,
-        )
-        return
-
-    lines, total = build_summary(rows)
-
-    message = (
-        "## 🎮 Gaming this week\n\n"
-        + "\n".join(lines)
-        + "\n\n"
-        + f"**Total: {format_duration(total)}**"
-    )
-
-    await interaction.response.send_message(
-        message,
-        ephemeral=False,
-    )
 
 
 bot.run(TOKEN)
