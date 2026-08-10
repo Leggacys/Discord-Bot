@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: discord-bot-postgres
+
+    environment:
+      POSTGRES_USER: discordbot
+      POSTGRES_PASSWORD: discordbot
+      POSTGRES_DB: discordbot
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - discord_bot_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U discordbot -d discordbot"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  discord_bot_postgres_data:
