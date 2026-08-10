@@ -12,11 +12,9 @@ from database.database import Base
 from database.models.user_model import User
 from database.models.game_session_model import GameSession
 
-
 load_dotenv()
 
 config = context.config
-
 
 # --------------------------------------------------
 # Database URL
@@ -27,12 +25,17 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL is missing")
 
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace(
+        "postgresql://",
+        "postgresql+psycopg://",
+        1,
+    )
 
 config.set_main_option(
     "sqlalchemy.url",
     DATABASE_URL,
 )
-
 
 # --------------------------------------------------
 # Logging
@@ -40,7 +43,6 @@ config.set_main_option(
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
-
 
 # --------------------------------------------------
 # SQLAlchemy metadata for Alembic autogenerate
