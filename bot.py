@@ -34,11 +34,18 @@ class GamingTrackerBot(commands.Bot):
         await self.load_extension("commands.week")
         await self.load_extension("commands.stats")
 
+        print("Commands loaded locally:")
+        for command in self.tree.get_commands():
+            print(f"  /{command.name}")
+
         synced = await self.tree.sync()
 
-        print(
-            f"Synced {len(synced)} slash commands."
-        )
+        print(f"Synced {len(synced)} slash commands with Discord:")
+
+        for command in synced:
+            print(
+                f"  /{command.name} - {command.description}"
+            )
 
 
 intents = discord.Intents.default()
