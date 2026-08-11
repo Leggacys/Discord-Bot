@@ -42,6 +42,10 @@ class GamingTrackerBot(commands.Bot):
             "commands.week"
         )
 
+        await self.load_extension(
+            "commands.stats"
+        )
+
         synced = await self.tree.sync()
 
         print(
