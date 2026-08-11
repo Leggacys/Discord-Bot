@@ -5,7 +5,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from commands.today import format_duration
+from commands.overall_gaming.today import format_duration
 from database.repositories.game_session_repository import get_sessions_between
 
 
