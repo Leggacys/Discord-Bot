@@ -10,7 +10,6 @@ from database.game_session_repository import (
     stop_session,
 )
 
-
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -30,21 +29,10 @@ def get_games(member: discord.Member) -> set[str]:
 
 class GamingTrackerBot(commands.Bot):
     async def setup_hook(self):
-        await self.load_extension(
-            "commands.playing"
-        )
-
-        await self.load_extension(
-            "commands.today"
-        )
-
-        await self.load_extension(
-            "commands.week"
-        )
-
-        await self.load_extension(
-            "commands.stats"
-        )
+        await self.load_extension("commands.playing")
+        await self.load_extension("commands.today")
+        await self.load_extension("commands.week")
+        await self.load_extension("commands.stats")
 
         synced = await self.tree.sync()
 
@@ -56,7 +44,6 @@ class GamingTrackerBot(commands.Bot):
 intents = discord.Intents.default()
 intents.members = True
 intents.presences = True
-
 
 bot = GamingTrackerBot(
     command_prefix="!",
