@@ -9,8 +9,39 @@ from commands.today import format_duration
 from database.game_session_repository import get_sessions_between
 
 
+def add_session_to_hours(
+    hour_totals: dict[int, float],
+    session_start: datetime,
+    session_end: datetime,
+) -> None:
+    current = session_start
+
+    while current < session_end:
+        next_hour = current.replace(
+            minute=0,
+            second=0,
+            microsecond=0,
+        ) + timedelta(hours=1)
+
+        chunk_end = min(
+            next_hour,
+            session_end,
+        )
+
+        seconds = (
+            chunk_end - current
+        ).total_seconds()
+
+        hour_totals[current.hour] += seconds
+
+        current = chunk_end
+
+
 class StatsCommand(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(
+        self,
+        bot: commands.Bot,
+    ):
         self.bot = bot
 
     @app_commands.command(
@@ -96,8 +127,16 @@ class StatsCommand(commands.Cog):
         longest_seconds = 0
 
         for session in rows:
-            session_start = session.started_at
-            session_end = session.ended_at or now
+            session_start = max(
+                session.started_at,
+                start,
+            )
+
+            session_end = min(
+                session.ended_at or now,
+                end,
+                now,
+            )
 
             duration = (
                 session_end - session_start
@@ -108,14 +147,19 @@ class StatsCommand(commands.Cog):
 
             total_seconds += duration
 
-            game_totals[session.game_name] += duration
+            game_totals[
+                session.game_name
+            ] += duration
 
-            day_key = session_start.date()
-            day_totals[day_key] += duration
+            day_totals[
+                session_start.date()
+            ] += duration
 
-            # Basic version:
-            # attributes the session to the hour it started.
-            hour_totals[session_start.hour] += duration
+            add_session_to_hours(
+                hour_totals,
+                session_start,
+                session_end,
+            )
 
             if duration > longest_seconds:
                 longest_seconds = duration
@@ -123,44 +167,32 @@ class StatsCommand(commands.Cog):
 
         if total_seconds <= 0:
             await interaction.followup.send(
-                "🎮 No completed gaming time found."
+                "🎮 No gaming time found."
             )
             return
-
-        # --------------------------------------
-        # Most played game
-        # --------------------------------------
 
         most_played_game, most_played_seconds = max(
             game_totals.items(),
             key=lambda item: item[1],
         )
 
-        # --------------------------------------
-        # Most active day
-        # --------------------------------------
-
         most_active_date, most_active_seconds = max(
             day_totals.items(),
             key=lambda item: item[1],
         )
-
-        # --------------------------------------
-        # Most active hour
-        # --------------------------------------
 
         most_active_hour, _ = max(
             hour_totals.items(),
             key=lambda item: item[1],
         )
 
-        next_hour = (most_active_hour + 1) % 24
+        next_hour = (
+            most_active_hour + 1
+        ) % 24
 
-        # --------------------------------------
-        # Average
-        # --------------------------------------
-
-        active_days = len(day_totals)
+        active_days = len(
+            day_totals
+        )
 
         average_seconds = (
             total_seconds / active_days
@@ -168,26 +200,16 @@ class StatsCommand(commands.Cog):
             else 0
         )
 
-        # --------------------------------------
-        # Games list
-        # --------------------------------------
-
         sorted_games = sorted(
             game_totals.items(),
             key=lambda item: item[1],
             reverse=True,
         )
 
-        game_lines = []
-
-        for game, seconds in sorted_games[:5]:
-            game_lines.append(
-                f"**{game}** — {format_duration(seconds)}"
-            )
-
-        # --------------------------------------
-        # Build embed
-        # --------------------------------------
+        game_lines = [
+            f"**{game}** — {format_duration(seconds)}"
+            for game, seconds in sorted_games[:5]
+        ]
 
         embed = discord.Embed(
             title=f"📊 Gaming Statistics — {title}",
@@ -196,7 +218,9 @@ class StatsCommand(commands.Cog):
 
         embed.add_field(
             name="🎮 Total played",
-            value=format_duration(total_seconds),
+            value=format_duration(
+                total_seconds
+            ),
             inline=True,
         )
 
@@ -208,7 +232,9 @@ class StatsCommand(commands.Cog):
 
         embed.add_field(
             name="📈 Average / active day",
-            value=format_duration(average_seconds),
+            value=format_duration(
+                average_seconds
+            ),
             inline=True,
         )
 
@@ -260,7 +286,9 @@ class StatsCommand(commands.Cog):
         )
 
 
-async def setup(bot: commands.Bot):
+async def setup(
+    bot: commands.Bot,
+):
     await bot.add_cog(
         StatsCommand(bot)
     )
