@@ -34,27 +34,44 @@ class GamingTrackerBot(commands.Bot):
         await self.load_extension("commands.week")
         await self.load_extension("commands.stats")
 
+       
+        guild = discord.Object(
+            id=658722299092008981
+        )
+
+      
+        self.tree.copy_global_to(
+            guild=guild
+        )
+
         print(
             "Commands loaded locally:",
             flush=True,
         )
 
-        for command in self.tree.get_commands():
+        for command in self.tree.get_commands(
+            guild=guild
+        ):
             print(
                 f"  /{command.name}",
                 flush=True,
             )
 
-        synced = await self.tree.sync()
+     
+        synced = await self.tree.sync(
+            guild=guild
+        )
 
         print(
-            f"Synced {len(synced)} slash commands with Discord:",
+            f"Synced {len(synced)} slash commands "
+            f"to guild {guild.id}:",
             flush=True,
         )
 
         for command in synced:
             print(
-                f"  /{command.name} - {command.description}",
+                f"  /{command.name} - "
+                f"{command.description}",
                 flush=True,
             )
 
