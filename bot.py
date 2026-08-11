@@ -34,17 +34,28 @@ class GamingTrackerBot(commands.Bot):
         await self.load_extension("commands.week")
         await self.load_extension("commands.stats")
 
-        print("Commands loaded locally:")
+        print(
+            "Commands loaded locally:",
+            flush=True,
+        )
+
         for command in self.tree.get_commands():
-            print(f"  /{command.name}")
+            print(
+                f"  /{command.name}",
+                flush=True,
+            )
 
         synced = await self.tree.sync()
 
-        print(f"Synced {len(synced)} slash commands with Discord:")
+        print(
+            f"Synced {len(synced)} slash commands with Discord:",
+            flush=True,
+        )
 
         for command in synced:
             print(
-                f"  /{command.name} - {command.description}"
+                f"  /{command.name} - {command.description}",
+                flush=True,
             )
 
 
@@ -60,7 +71,7 @@ bot = GamingTrackerBot(
 
 @bot.event
 async def on_ready():
-    print(f"Connected as {bot.user}")
+    print(f"Connected as {bot.user}", flush=True)
 
 
 @bot.event
