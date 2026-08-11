@@ -13,9 +13,15 @@ from database.game_session_repository import (
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
+GUILD_ID = os.getenv("DISCORD_GUILD_ID")
 
 if not TOKEN:
     raise RuntimeError("DISCORD_TOKEN is missing")
+
+if not GUILD_ID:
+    raise RuntimeError("DISCORD_GUILD_ID is missing")
+
+GUILD_ID = int(GUILD_ID)
 
 
 def get_games(member: discord.Member) -> set[str]:
@@ -33,13 +39,12 @@ class GamingTrackerBot(commands.Bot):
         await self.load_extension("commands.today")
         await self.load_extension("commands.week")
         await self.load_extension("commands.stats")
+        await self.load_extension("commands.top")
 
-       
         guild = discord.Object(
-            id=1535000769789562962
+            id=GUILD_ID
         )
 
-      
         self.tree.copy_global_to(
             guild=guild
         )
@@ -57,7 +62,6 @@ class GamingTrackerBot(commands.Bot):
                 flush=True,
             )
 
-     
         synced = await self.tree.sync(
             guild=guild
         )
@@ -88,7 +92,10 @@ bot = GamingTrackerBot(
 
 @bot.event
 async def on_ready():
-    print(f"Connected as {bot.user}", flush=True)
+    print(
+        f"Connected as {bot.user}",
+        flush=True,
+    )
 
 
 @bot.event
@@ -116,7 +123,8 @@ async def on_presence_update(
 
     for game in started_games:
         print(
-            f"{after.display_name} started {game}"
+            f"{after.display_name} started {game}",
+            flush=True,
         )
 
         start_session(
@@ -126,7 +134,8 @@ async def on_presence_update(
 
     for game in stopped_games:
         print(
-            f"{after.display_name} stopped {game}"
+            f"{after.display_name} stopped {game}",
+            flush=True,
         )
 
         stop_session(

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from database.database import SessionLocal
 from database.models.game_session_model import GameSession
@@ -13,7 +13,10 @@ def ensure_user(
     display_name: str | None,
 ):
     with SessionLocal() as session:
-        user = session.get(User, discord_user_id)
+        user = session.get(
+            User,
+            discord_user_id,
+        )
 
         if user is None:
             user = User(
@@ -71,7 +74,9 @@ def stop_session(
                 GameSession.game_name == game_name,
                 GameSession.ended_at.is_(None),
             )
-            .order_by(GameSession.started_at.desc())
+            .order_by(
+                GameSession.started_at.desc()
+            )
             .limit(1)
         )
 
@@ -103,10 +108,39 @@ def get_sessions_between(
             select(GameSession)
             .where(
                 GameSession.discord_user_id == discord_user_id,
-                GameSession.started_at >= start,
+
                 GameSession.started_at < end,
+
+                or_(
+                    GameSession.ended_at.is_(None),
+                    GameSession.ended_at > start,
+                ),
             )
-            .order_by(GameSession.started_at.desc())
+            .order_by(
+                GameSession.started_at.desc()
+            )
+        ).all()
+
+        return list(sessions)
+
+
+def get_all_sessions_between(
+    start: datetime,
+    end: datetime,
+):
+    with SessionLocal() as session:
+        sessions = session.scalars(
+            select(GameSession)
+            .where(
+                GameSession.started_at < end,
+                or_(
+                    GameSession.ended_at.is_(None),
+                    GameSession.ended_at > start,
+                ),
+            )
+            .order_by(
+                GameSession.started_at.desc()
+            )
         ).all()
 
         return list(sessions)
