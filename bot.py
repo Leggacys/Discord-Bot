@@ -36,7 +36,7 @@ class GamingTrackerBot(commands.Bot):
 
        
         guild = discord.Object(
-            id=658722299092008981
+            id=1535000769789562962
         )
 
       
