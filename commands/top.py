@@ -6,7 +6,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from commands.today import format_duration
-from database.game_session_repository import (
+from database.repositories.game_session_repository import (
     get_all_sessions_between,
 )
 from services.roast_service import generate_roast

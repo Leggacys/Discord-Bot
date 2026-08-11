@@ -11,6 +11,7 @@ from database.database import Base
 # Import models so SQLAlchemy registers them in Base.metadata
 from database.models.user_model import User
 from database.models.game_session_model import GameSession
+from database.models.steam_tracking_state_model import SteamTrackingState
 
 load_dotenv()
 

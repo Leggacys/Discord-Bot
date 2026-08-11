@@ -5,7 +5,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from database.game_session_repository import get_sessions_between
+from database.repositories.game_session_repository import get_sessions_between
 
 
 def format_duration(seconds: int) -> str:

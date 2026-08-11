@@ -4,7 +4,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from database.game_session_repository import (
+from database.repositories.game_session_repository import (
     ensure_user,
     start_session,
     stop_session,

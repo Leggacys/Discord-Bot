@@ -7,6 +7,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -16,8 +17,8 @@ if TYPE_CHECKING:
     from .user_model import User
 
 
-class GameSession(Base):
-    __tablename__ = "game_sessions"
+class SteamTrackingState(Base):
+    __tablename__ = "steam_tracking_states"
 
     id: Mapped[int] = mapped_column(
         Integer,
@@ -35,32 +36,35 @@ class GameSession(Base):
         index=True,
     )
 
+    steam_app_id: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
     game_name: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
     )
 
-    started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-    )
-
-    ended_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-    )
-
-    duration_seconds: Mapped[int | None] = mapped_column(
+    playtime_minutes: Mapped[int] = mapped_column(
         Integer,
-        nullable=True,
+        nullable=False,
+        default=0,
     )
 
-    source: Mapped[str] = mapped_column(
-        String(20),
+    checked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         nullable=False,
-        default="discord",
     )
 
     user: Mapped["User"] = relationship(
-        back_populates="sessions",
+        back_populates="steam_tracking_states",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "discord_user_id",
+            "steam_app_id",
+            name="uq_steam_tracking_user_game",
+        ),
     )

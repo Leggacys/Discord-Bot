@@ -6,7 +6,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from commands.today import build_summary, format_duration
-from database.game_session_repository import get_sessions_between
+from database.repositories.game_session_repository import get_sessions_between
 
 
 class WeekCommand(commands.Cog):

@@ -1,10 +1,15 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String
+from sqlalchemy import BigInteger, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from ..database import Base
+
+if TYPE_CHECKING:
+    from .game_session_model import GameSession
+    from .steam_tracking_state_model import SteamTrackingState
 
 
 class User(Base):
@@ -25,6 +30,13 @@ class User(Base):
         nullable=True,
     )
 
+    steam_id: Mapped[str | None] = mapped_column(
+        String(20),
+        unique=True,
+        nullable=True,
+        index=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -33,4 +45,10 @@ class User(Base):
 
     sessions: Mapped[list["GameSession"]] = relationship(
         back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    steam_tracking_states: Mapped[list["SteamTrackingState"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
