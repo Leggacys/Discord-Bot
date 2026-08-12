@@ -59,6 +59,7 @@ class GameSession(Base):
         String(20),
         nullable=False,
         default="discord",
+        server_default="discord",
     )
 
     user: Mapped["User"] = relationship(
