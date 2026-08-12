@@ -78,6 +78,10 @@ class GamingTrackerBot(commands.Bot):
             "commands.pubg.commands"
         )
 
+        await self.load_extension(
+            "commands.steam.steam_link"
+        )
+
         pubg_config = get_pubg_config()
 
         if pubg_config:

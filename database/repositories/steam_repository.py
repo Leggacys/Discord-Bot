@@ -1,9 +1,8 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 
 from database.database import SessionLocal
-from database.models.game_session_model import GameSession
 from database.models.steam_tracking_state_model import SteamTrackingState
 from database.models.user_model import User
 
@@ -127,31 +126,3 @@ def remove_user_steam_id(
         session.commit()
 
         return True
-
-def create_steam_session(
-    *,
-    discord_user_id: int,
-    game_name: str,
-    duration_seconds: int,
-):
-    if duration_seconds <= 0:
-        return
-
-    now = datetime.now(timezone.utc)
-
-    started_at = now - timedelta(
-        seconds=duration_seconds
-    )
-
-    with SessionLocal() as session:
-        game_session = GameSession(
-            discord_user_id=discord_user_id,
-            game_name=game_name,
-            started_at=started_at,
-            ended_at=now,
-            duration_seconds=duration_seconds,
-            source="steam",
-        )
-
-        session.add(game_session)
-        session.commit()

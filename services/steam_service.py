@@ -5,7 +5,10 @@ import aiohttp
 from discord.ext import tasks
 from dotenv import load_dotenv
 
-from database.repositories.steam_repository import create_steam_session, get_tracking_playtime, get_users_with_steam_id, upsert_tracking_state
+from database.repositories.steam_repository import get_tracking_playtime, get_users_with_steam_id, upsert_tracking_state
+from database.repositories.game_session_repository import (
+    create_steam_session,
+)
 
 
 load_dotenv()
@@ -219,7 +222,6 @@ class SteamPlaytimePoller:
                 if delta_minutes <= 0:
                     continue
 
-                # Safety protection
                 if delta_minutes > 30:
                     print(
                         f"Suspicious Steam delta ignored: "
