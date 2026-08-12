@@ -1,18 +1,21 @@
 import os
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 import aiohttp
 from discord.ext import tasks
 from dotenv import load_dotenv
 
-from database.repositories.steam_repository import get_tracking_playtime, get_users_with_steam_id, upsert_tracking_state
 from database.repositories.game_session_repository import (
     create_steam_session,
 )
-
+from database.repositories.steam_repository import (
+    get_tracking_playtime,
+    get_users_with_steam_id,
+    upsert_tracking_state,
+)
 
 load_dotenv()
-
 
 BASE_URL = "https://api.steampowered.com"
 
@@ -96,6 +99,98 @@ async def get_recently_played_games(
         }
         for game in games
     ]
+
+async def resolve_vanity_url(
+    vanity_name: str,
+    config: SteamConfig | None = None,
+) -> str | None:
+    if config is None:
+        config = get_steam_config()
+
+    if config is None:
+        raise RuntimeError(
+            "STEAM_API_KEY is missing"
+        )
+
+    url = (
+        f"{BASE_URL}/"
+        "ISteamUser/"
+        "ResolveVanityURL/v0001/"
+    )
+
+    params = {
+        "key": config.api_key,
+        "vanityurl": vanity_name,
+    }
+
+    timeout = aiohttp.ClientTimeout(
+        total=10,
+    )
+
+    async with aiohttp.ClientSession(
+        timeout=timeout,
+    ) as session:
+        async with session.get(
+            url,
+            params=params,
+        ) as response:
+            response.raise_for_status()
+
+            payload = await response.json()
+
+    result = payload.get(
+        "response",
+        {},
+    )
+
+    if result.get("success") != 1:
+        return None
+
+    return result.get("steamid")
+
+
+async def resolve_steam_id(
+    value: str,
+) -> str | None:
+    value = value.strip()
+
+    # Direct SteamID64
+    if value.isdigit() and len(value) == 17:
+        return value
+
+    # Steam profile URL
+    if "steamcommunity.com" in value:
+        parsed = urlparse(value)
+
+        parts = [
+            part
+            for part in parsed.path.split("/")
+            if part
+        ]
+
+        if len(parts) >= 2:
+            profile_type = parts[0]
+            profile_value = parts[1]
+
+            # Example:
+            # steamcommunity.com/profiles/76561198...
+            if (
+                profile_type == "profiles"
+                and profile_value.isdigit()
+            ):
+                return profile_value
+
+            # Example:
+            # steamcommunity.com/id/twistar/
+            if profile_type == "id":
+                return await resolve_vanity_url(
+                    profile_value,
+                )
+
+    # Plain vanity name, e.g. "twistar"
+    return await resolve_vanity_url(
+        value,
+    )
 
 
 class SteamPlaytimePoller:
