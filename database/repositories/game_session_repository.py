@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import or_, select
 
@@ -145,3 +145,31 @@ def get_all_sessions_between(
         ).all()
 
         return list(sessions)
+    
+def create_steam_session(
+    *,
+    discord_user_id: int,
+    game_name: str,
+    duration_seconds: int,
+) -> None:
+    if duration_seconds <= 0:
+        return
+
+    now = datetime.now(timezone.utc)
+
+    started_at = now - timedelta(
+        seconds=duration_seconds
+    )
+
+    with SessionLocal() as session:
+        game_session = GameSession(
+            discord_user_id=discord_user_id,
+            game_name=game_name,
+            started_at=started_at,
+            ended_at=now,
+            duration_seconds=duration_seconds,
+            source="steam",
+        )
+
+        session.add(game_session)
+        session.commit()
