@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import or_, select
 
 from database.database import SessionLocal
+from database import models
 from database.models.game_session_model import GameSession
 from database.models.user_model import User
 

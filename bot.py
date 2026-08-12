@@ -9,6 +9,7 @@ from database.repositories.game_session_repository import (
     start_session,
     stop_session,
 )
+from services.pubg_service import PubgMatchPoller, get_pubg_config
 
 load_dotenv()
 
@@ -35,11 +36,32 @@ def get_games(member: discord.Member) -> set[str]:
 
 class GamingTrackerBot(commands.Bot):
     async def setup_hook(self):
-        await self.load_extension("commands.playing")
-        await self.load_extension("commands.today")
-        await self.load_extension("commands.week")
-        await self.load_extension("commands.stats")
-        await self.load_extension("commands.top")
+        await self.load_extension("commands.overall_gaming.playing")
+        await self.load_extension("commands.overall_gaming.today")
+        await self.load_extension("commands.overall_gaming.week")
+        await self.load_extension("commands.overall_gaming.stats")
+        await self.load_extension("commands.overall_gaming.top")
+        await self.load_extension("commands.pubg.commands")
+
+        pubg_config = get_pubg_config()
+
+        if pubg_config:
+            self.pubg_match_poller = PubgMatchPoller(
+                self,
+                pubg_config,
+            )
+            self.pubg_match_poller.start()
+
+            print(
+                "PUBG match poller started.",
+                flush=True,
+            )
+        else:
+            print(
+                "PUBG match poller disabled. "
+                "Set PUBG_API_KEY to enable it.",
+                flush=True,
+            )
 
         guild = discord.Object(
             id=GUILD_ID

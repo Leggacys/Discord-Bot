@@ -12,6 +12,10 @@ from database.database import Base
 from database.models.user_model import User
 from database.models.game_session_model import GameSession
 from database.models.steam_tracking_state_model import SteamTrackingState
+from database.models.pubg_account_model import PubgAccount
+from database.models.pubg_match_model import PubgMatch
+from database.models.pubg_player_match_stat_model import PubgPlayerMatchStat
+from database.models.pubg_announcement_model import PubgAnnouncement
 
 load_dotenv()
 
