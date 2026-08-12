@@ -9,7 +9,17 @@ from database.repositories.game_session_repository import (
     start_session,
     stop_session,
 )
-from services.pubg_service import PubgMatchPoller, get_pubg_config
+
+from services.pubg_service import (
+    PubgMatchPoller,
+    get_pubg_config,
+)
+
+from services.steam_service import (
+    SteamPlaytimePoller,
+    get_steam_config,
+)
+
 
 load_dotenv()
 
@@ -17,31 +27,56 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = os.getenv("DISCORD_GUILD_ID")
 
 if not TOKEN:
-    raise RuntimeError("DISCORD_TOKEN is missing")
+    raise RuntimeError(
+        "DISCORD_TOKEN is missing"
+    )
 
 if not GUILD_ID:
-    raise RuntimeError("DISCORD_GUILD_ID is missing")
+    raise RuntimeError(
+        "DISCORD_GUILD_ID is missing"
+    )
 
 GUILD_ID = int(GUILD_ID)
 
 
-def get_games(member: discord.Member) -> set[str]:
+def get_games(
+    member: discord.Member,
+) -> set[str]:
     return {
         activity.name
         for activity in member.activities
-        if activity.type == discord.ActivityType.playing
+        if activity.type
+        == discord.ActivityType.playing
         and activity.name
     }
 
 
 class GamingTrackerBot(commands.Bot):
     async def setup_hook(self):
-        await self.load_extension("commands.overall_gaming.playing")
-        await self.load_extension("commands.overall_gaming.today")
-        await self.load_extension("commands.overall_gaming.week")
-        await self.load_extension("commands.overall_gaming.stats")
-        await self.load_extension("commands.overall_gaming.top")
-        await self.load_extension("commands.pubg.commands")
+
+        await self.load_extension(
+            "commands.overall_gaming.playing"
+        )
+
+        await self.load_extension(
+            "commands.overall_gaming.today"
+        )
+
+        await self.load_extension(
+            "commands.overall_gaming.week"
+        )
+
+        await self.load_extension(
+            "commands.overall_gaming.stats"
+        )
+
+        await self.load_extension(
+            "commands.overall_gaming.top"
+        )
+
+        await self.load_extension(
+            "commands.pubg.commands"
+        )
 
         pubg_config = get_pubg_config()
 
@@ -50,16 +85,42 @@ class GamingTrackerBot(commands.Bot):
                 self,
                 pubg_config,
             )
+
             self.pubg_match_poller.start()
 
             print(
                 "PUBG match poller started.",
                 flush=True,
             )
+
         else:
             print(
                 "PUBG match poller disabled. "
                 "Set PUBG_API_KEY to enable it.",
+                flush=True,
+            )
+
+        steam_config = get_steam_config()
+
+        if steam_config:
+            self.steam_playtime_poller = (
+                SteamPlaytimePoller(
+                    self,
+                    steam_config,
+                )
+            )
+
+            self.steam_playtime_poller.start()
+
+            print(
+                "Steam playtime poller started.",
+                flush=True,
+            )
+
+        else:
+            print(
+                "Steam playtime poller disabled. "
+                "Set STEAM_API_KEY to enable it.",
                 flush=True,
             )
 
@@ -128,13 +189,26 @@ async def on_presence_update(
     if after.bot:
         return
 
-    before_games = get_games(before)
-    after_games = get_games(after)
+    before_games = get_games(
+        before
+    )
 
-    started_games = after_games - before_games
-    stopped_games = before_games - after_games
+    after_games = get_games(
+        after
+    )
 
-    if not started_games and not stopped_games:
+    started_games = (
+        after_games - before_games
+    )
+
+    stopped_games = (
+        before_games - after_games
+    )
+
+    if (
+        not started_games
+        and not stopped_games
+    ):
         return
 
     ensure_user(
@@ -145,7 +219,8 @@ async def on_presence_update(
 
     for game in started_games:
         print(
-            f"{after.display_name} started {game}",
+            f"{after.display_name} "
+            f"started {game}",
             flush=True,
         )
 
@@ -156,7 +231,8 @@ async def on_presence_update(
 
     for game in stopped_games:
         print(
-            f"{after.display_name} stopped {game}",
+            f"{after.display_name} "
+            f"stopped {game}",
             flush=True,
         )
 
