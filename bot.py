@@ -55,23 +55,7 @@ class GamingTrackerBot(commands.Bot):
     async def setup_hook(self):
 
         await self.load_extension(
-            "commands.overall_gaming.playing"
-        )
-
-        await self.load_extension(
-            "commands.overall_gaming.today"
-        )
-
-        await self.load_extension(
-            "commands.overall_gaming.week"
-        )
-
-        await self.load_extension(
-            "commands.overall_gaming.stats"
-        )
-
-        await self.load_extension(
-            "commands.overall_gaming.top"
+            "commands.overall_gaming.commands"
         )
 
         await self.load_extension(
