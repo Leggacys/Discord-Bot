@@ -2,6 +2,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from commands.overall_gaming.limit import (
+    handle_limit_remove,
+    handle_limit_set,
+    handle_limit_show,
+)
 from commands.overall_gaming.playing import handle_playing
 from commands.overall_gaming.stats import handle_stats
 from commands.overall_gaming.today import handle_today
@@ -13,6 +18,12 @@ class GamingCommand(commands.Cog):
     gaming = app_commands.Group(
         name="gaming",
         description="Gaming activity, stats, and leaderboards.",
+    )
+
+    limit = app_commands.Group(
+        name="limit",
+        description="Manage your daily gaming limit.",
+        parent=gaming,
     )
 
     def __init__(
@@ -67,6 +78,10 @@ class GamingCommand(commands.Cog):
     @app_commands.choices(
         period=[
             app_commands.Choice(
+                name="Today",
+                value="today",
+            ),
+            app_commands.Choice(
                 name="This week",
                 value="week",
             ),
@@ -117,6 +132,47 @@ class GamingCommand(commands.Cog):
         await handle_top(
             interaction,
             period.value,
+        )
+
+    @limit.command(
+        name="set",
+        description="Set your daily gaming limit.",
+    )
+    @app_commands.describe(
+        hours="Maximum gaming hours per day",
+    )
+    async def limit_set(
+        self,
+        interaction: discord.Interaction,
+        hours: float,
+    ):
+        await handle_limit_set(
+            interaction,
+            hours,
+        )
+
+    @limit.command(
+        name="show",
+        description="Show your daily gaming limit.",
+    )
+    async def limit_show(
+        self,
+        interaction: discord.Interaction,
+    ):
+        await handle_limit_show(
+            interaction,
+        )
+
+    @limit.command(
+        name="remove",
+        description="Remove your daily gaming limit.",
+    )
+    async def limit_remove(
+        self,
+        interaction: discord.Interaction,
+    ):
+        await handle_limit_remove(
+            interaction,
         )
 
 

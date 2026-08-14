@@ -10,6 +10,10 @@ from database.repositories.game_session_repository import (
     stop_session,
 )
 
+from events.session_roast import (
+    queue_finished_session,
+)
+
 from services.pubg_service import (
     PubgMatchPoller,
     get_pubg_config,
@@ -25,6 +29,13 @@ load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = os.getenv("DISCORD_GUILD_ID")
+
+SESSION_ROAST_CHANNEL_ID = int(
+    os.getenv(
+        "SESSION_ROAST_CHANNEL_ID",
+        "0",
+    )
+)
 
 if not TOKEN:
     raise RuntimeError(
@@ -64,6 +75,10 @@ class GamingTrackerBot(commands.Bot):
 
         await self.load_extension(
             "commands.steam.steam_link"
+        )
+
+        await self.load_extension(
+            "events.everyone_roast"
         )
 
         pubg_config = get_pubg_config()
@@ -154,6 +169,7 @@ class GamingTrackerBot(commands.Bot):
 intents = discord.Intents.default()
 intents.members = True
 intents.presences = True
+intents.message_content = True
 
 bot = GamingTrackerBot(
     command_prefix="!",
@@ -224,9 +240,28 @@ async def on_presence_update(
             flush=True,
         )
 
-        stop_session(
+        duration_seconds = stop_session(
             discord_user_id=after.id,
             game_name=game,
+        )
+
+        if duration_seconds is None:
+            continue
+
+        if not SESSION_ROAST_CHANNEL_ID:
+            print(
+                "Session roast skipped: "
+                "SESSION_ROAST_CHANNEL_ID is not configured.",
+                flush=True,
+            )
+            continue
+
+        await queue_finished_session(
+            bot,
+            username=after.display_name,
+            game_name=game,
+            duration_seconds=duration_seconds,
+            channel_id=SESSION_ROAST_CHANNEL_ID,
         )
 
 

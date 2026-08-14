@@ -2,13 +2,15 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 import discord
-from discord import app_commands
-from discord.ext import commands
 
-from database.repositories.game_session_repository import get_sessions_between
+from database.repositories.game_session_repository import (
+    get_sessions_between,
+)
 
 
-def format_duration(seconds: int) -> str:
+def format_duration(seconds: int | float) -> str:
+    seconds = int(seconds)
+
     hours = seconds // 3600
     minutes = (seconds % 3600) // 60
 
@@ -18,21 +20,34 @@ def format_duration(seconds: int) -> str:
     return f"{minutes}m"
 
 
-def build_summary(rows) -> tuple[list[str], int]:
+def build_summary(
+    rows,
+) -> tuple[list[str], int]:
     totals = defaultdict(int)
     total_seconds = 0
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(
+        timezone.utc
+    )
 
     for row in rows:
         if row.duration_seconds is not None:
             seconds = row.duration_seconds
         else:
             seconds = int(
-                (now - row.started_at).total_seconds()
+                (
+                    now
+                    - row.started_at
+                ).total_seconds()
             )
 
-        totals[row.game_name] += seconds
+        if seconds <= 0:
+            continue
+
+        totals[
+            row.game_name
+        ] += seconds
+
         total_seconds += seconds
 
     sorted_games = sorted(
@@ -42,61 +57,66 @@ def build_summary(rows) -> tuple[list[str], int]:
     )
 
     lines = [
-        f"🎮 **{game}** — {format_duration(seconds)}"
+        (
+            f"🎮 **{game}** — "
+            f"{format_duration(seconds)}"
+        )
         for game, seconds in sorted_games
     ]
 
     return lines, total_seconds
 
 
-class TodayCommand(commands.Cog):
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+async def handle_today(
+    interaction: discord.Interaction,
+):
+    await interaction.response.defer()
 
-    @app_commands.command(
-        name="today",
-        description="Show your gaming time today.",
+    now = datetime.now(
+        timezone.utc
     )
-    async def today(
-        self,
-        interaction: discord.Interaction,
-    ):
-        await interaction.response.defer()
 
-        now = datetime.now(timezone.utc)
+    start = now.replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
 
-        start = now.replace(
-            hour=0,
-            minute=0,
-            second=0,
-            microsecond=0,
+    end = (
+        start
+        + timedelta(days=1)
+    )
+
+    rows = get_sessions_between(
+        interaction.user.id,
+        start,
+        end,
+    )
+
+    if not rows:
+        await interaction.followup.send(
+            "🎮 No gaming sessions recorded today."
         )
+        return
 
-        end = start + timedelta(days=1)
+    lines, total = build_summary(
+        rows
+    )
 
-        rows = get_sessions_between(
-            interaction.user.id,
-            start,
-            end,
+    if total <= 0:
+        await interaction.followup.send(
+            "🎮 No gaming time recorded today."
         )
+        return
 
-        if not rows:
-            await interaction.followup.send(
-                "🎮 No gaming sessions recorded today."
-            )
-            return
+    message = (
+        "## 🎮 Gaming today\n\n"
+        + "\n".join(lines)
+        + "\n\n"
+        + f"**Total: {format_duration(total)}**"
+    )
 
-        lines, total = build_summary(rows)
-
-        message = (
-            "## 🎮 Gaming today\n\n"
-            + "\n".join(lines)
-            + "\n\n"
-            + f"**Total: {format_duration(total)}**"
-        )
-
-        await interaction.followup.send(message)
-
-
-async def setup(bot: commands.Bot):
-    await bot.add_cog(TodayCommand(bot))
+    await interaction.followup.send(
+        message
+    )

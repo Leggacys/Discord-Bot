@@ -1,9 +1,8 @@
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
+import asyncio
 import discord
-from discord import app_commands
-from discord.ext import commands
 
 from commands.overall_gaming.today import format_duration
 from database.repositories.game_session_repository import (
@@ -12,296 +11,319 @@ from database.repositories.game_session_repository import (
 from services.roast_service import generate_roast
 
 
-class TopCommand(commands.Cog):
-    def __init__(
-        self,
-        bot: commands.Bot,
-    ):
-        self.bot = bot
+async def handle_top(
+    interaction: discord.Interaction,
+    period: str,
+):
+    await interaction.response.defer()
 
-    @app_commands.command(
-        name="top",
-        description="Show the gaming leaderboard and roast the winner.",
+    now = datetime.now(
+        timezone.utc
     )
-    @app_commands.describe(
-        period="Leaderboard period",
-    )
-    @app_commands.choices(
-        period=[
-            app_commands.Choice(
-                name="Today",
-                value="today",
-            ),
-            app_commands.Choice(
-                name="This week",
-                value="week",
-            ),
-            app_commands.Choice(
-                name="This month",
-                value="month",
-            ),
-        ]
-    )
-    async def top(
-        self,
-        interaction: discord.Interaction,
-        period: app_commands.Choice[str],
-    ):
-        await interaction.response.defer()
 
-        now = datetime.now(timezone.utc)
+    # --------------------------------------
+    # Period
+    # --------------------------------------
 
-        # --------------------------------------
-        # Period
-        # --------------------------------------
+    if period == "today":
+        start = now.replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
 
-        if period.value == "today":
-            start = now.replace(
-                hour=0,
-                minute=0,
-                second=0,
-                microsecond=0,
+        end = (
+            start
+            + timedelta(days=1)
+        )
+
+        title = "Today"
+        award_title = (
+            "💀 Degenerate of the Day"
+        )
+
+    elif period == "week":
+        start = (
+            now
+            - timedelta(
+                days=now.weekday()
             )
+        ).replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
 
-            end = start + timedelta(days=1)
+        end = (
+            start
+            + timedelta(days=7)
+        )
 
-            title = "Today"
-            award_title = "💀 Degenerate of the Day"
+        title = "This Week"
+        award_title = (
+            "💀 Degenerate of the Week"
+        )
 
-        elif period.value == "week":
-            start = (
-                now - timedelta(days=now.weekday())
-            ).replace(
-                hour=0,
-                minute=0,
-                second=0,
-                microsecond=0,
+    else:
+        start = now.replace(
+            day=1,
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+
+        if start.month == 12:
+            end = start.replace(
+                year=start.year + 1,
+                month=1,
             )
-
-            end = start + timedelta(days=7)
-
-            title = "This Week"
-            award_title = "💀 Degenerate of the Week"
-
         else:
-            start = now.replace(
-                day=1,
-                hour=0,
-                minute=0,
-                second=0,
-                microsecond=0,
+            end = start.replace(
+                month=start.month + 1,
             )
 
-            if start.month == 12:
-                end = start.replace(
-                    year=start.year + 1,
-                    month=1,
-                )
-            else:
-                end = start.replace(
-                    month=start.month + 1,
-                )
+        title = "This Month"
+        award_title = (
+            "💀 Degenerate of the Month"
+        )
 
-            title = "This Month"
-            award_title = "💀 Degenerate of the Month"
+    # --------------------------------------
+    # Fetch sessions
+    # --------------------------------------
 
-        # --------------------------------------
-        # Fetch sessions
-        # --------------------------------------
+    rows = get_all_sessions_between(
+        start,
+        end,
+    )
 
-        rows = get_all_sessions_between(
+    if not rows:
+        await interaction.followup.send(
+            f"🎮 No gaming sessions recorded "
+            f"for {title.lower()}."
+        )
+        return
+
+    # --------------------------------------
+    # Calculate totals
+    # --------------------------------------
+
+    user_totals = defaultdict(float)
+
+    user_game_totals = defaultdict(
+        lambda: defaultdict(float)
+    )
+
+    for session in rows:
+        session_start = max(
+            session.started_at,
             start,
+        )
+
+        session_end = min(
+            session.ended_at or now,
             end,
+            now,
         )
 
-        if not rows:
-            await interaction.followup.send(
-                f"🎮 No gaming sessions recorded for {title.lower()}."
-            )
-            return
+        duration = (
+            session_end
+            - session_start
+        ).total_seconds()
 
-        # --------------------------------------
-        # Calculate totals
-        # --------------------------------------
+        if duration <= 0:
+            continue
 
-        user_totals = defaultdict(float)
-
-        user_game_totals = defaultdict(
-            lambda: defaultdict(float)
+        user_id = (
+            session.discord_user_id
         )
 
-        for session in rows:
-            session_start = max(
-                session.started_at,
-                start,
-            )
+        user_totals[
+            user_id
+        ] += duration
 
-            session_end = min(
-                session.ended_at or now,
-                end,
-                now,
-            )
+        user_game_totals[
+            user_id
+        ][
+            session.game_name
+        ] += duration
 
-            duration = (
-                session_end - session_start
-            ).total_seconds()
-
-            if duration <= 0:
-                continue
-
-            user_id = session.discord_user_id
-
-            user_totals[user_id] += duration
-
-            user_game_totals[user_id][
-                session.game_name
-            ] += duration
-
-        if not user_totals:
-            await interaction.followup.send(
-                "🎮 No gaming time found."
-            )
-            return
-
-        # --------------------------------------
-        # Ranking
-        # --------------------------------------
-
-        ranking = sorted(
-            user_totals.items(),
-            key=lambda item: item[1],
-            reverse=True,
+    if not user_totals:
+        await interaction.followup.send(
+            "🎮 No gaming time found."
         )
+        return
 
-        medals = [
-            "🥇",
-            "🥈",
-            "🥉",
-        ]
+    # --------------------------------------
+    # Ranking
+    # --------------------------------------
 
-        leaderboard_lines = []
+    ranking = sorted(
+        user_totals.items(),
+        key=lambda item: item[1],
+        reverse=True,
+    )
 
-        for index, (
-            user_id,
-            seconds,
-        ) in enumerate(ranking[:10]):
-            member = None
+    medals = [
+        "🥇",
+        "🥈",
+        "🥉",
+    ]
 
-            if interaction.guild:
-                member = interaction.guild.get_member(
-                    user_id
-                )
+    leaderboard_lines = []
 
-            if member:
-                display_name = member.display_name
-            else:
-                display_name = f"<@{user_id}>"
-
-            if index < len(medals):
-                position = medals[index]
-            else:
-                position = f"`{index + 1}.`"
-
-            leaderboard_lines.append(
-                f"{position} **{display_name}** — "
-                f"{format_duration(seconds)}"
-            )
-
-        # --------------------------------------
-        # Winner
-        # --------------------------------------
-
-        winner_id, winner_seconds = ranking[0]
-
-        winner_member = None
+    for index, (
+        user_id,
+        seconds,
+    ) in enumerate(
+        ranking[:10]
+    ):
+        member = None
 
         if interaction.guild:
-            winner_member = interaction.guild.get_member(
+            member = (
+                interaction.guild
+                .get_member(
+                    user_id
+                )
+            )
+
+        if member:
+            display_name = (
+                member.display_name
+            )
+        else:
+            display_name = (
+                f"<@{user_id}>"
+            )
+
+        if index < len(medals):
+            position = medals[
+                index
+            ]
+        else:
+            position = (
+                f"`{index + 1}.`"
+            )
+
+        leaderboard_lines.append(
+            f"{position} "
+            f"**{display_name}** — "
+            f"{format_duration(seconds)}"
+        )
+
+    # --------------------------------------
+    # Winner
+    # --------------------------------------
+
+    winner_id, winner_seconds = (
+        ranking[0]
+    )
+
+    winner_member = None
+
+    if interaction.guild:
+        winner_member = (
+            interaction.guild
+            .get_member(
                 winner_id
             )
+        )
 
-        if winner_member:
-            winner_name = winner_member.display_name
-        else:
-            winner_name = f"<@{winner_id}>"
+    if winner_member:
+        winner_name = (
+            winner_member.display_name
+        )
+    else:
+        winner_name = (
+            f"<@{winner_id}>"
+        )
 
-        # --------------------------------------
-        # Winner's most played game
-        # --------------------------------------
+    # --------------------------------------
+    # Winner's most played game
+    # --------------------------------------
 
-        winner_games = user_game_totals[
+    winner_games = (
+        user_game_totals[
             winner_id
         ]
+    )
 
-        winner_top_game, winner_top_game_seconds = max(
-            winner_games.items(),
-            key=lambda item: item[1],
+    (
+        winner_top_game,
+        winner_top_game_seconds,
+    ) = max(
+        winner_games.items(),
+        key=lambda item: item[1],
+    )
+
+    # --------------------------------------
+    # Generate roast
+    # --------------------------------------
+
+    try:
+        roast = await asyncio.to_thread(
+            generate_roast,
+            username=winner_name,
+            total_seconds=winner_seconds,
+            top_game=winner_top_game,
         )
 
-        # --------------------------------------
-        # Generate roast
-        # --------------------------------------
-
-        try:
-            roast = generate_roast(
-                username=winner_name,
-                total_seconds=winner_seconds,
-                top_game=winner_top_game,
-            )
-
-        except Exception as exc:
-            print(
-                f"Failed to generate roast: {exc}",
-                flush=True,
-            )
-
-            roast = (
-                "Bro put in a full gaming shift and somehow "
-                "still forgot to clock in at a real job."
-            )
-
-        # --------------------------------------
-        # Embed
-        # --------------------------------------
-
-        embed = discord.Embed(
-            title=f"🏆 Gaming Top — {title}",
-            colour=discord.Colour.orange(),
+    except Exception as exc:
+        print(
+            f"Failed to generate roast: {exc}",
+            flush=True,
         )
 
-        embed.description = "\n".join(
-            leaderboard_lines
+        roast = (
+            "Ai băgat program complet la gaming "
+            "și tot n-ai pontat la un job adevărat."
         )
 
-        embed.add_field(
-            name=award_title,
-            value=(
-                f"**{winner_name}**\n"
-                f"🎮 {format_duration(winner_seconds)}\n"
-                f"🏆 {winner_top_game} — "
-                f"{format_duration(winner_top_game_seconds)}"
-            ),
-            inline=False,
+    # --------------------------------------
+    # Embed
+    # --------------------------------------
+
+    embed = discord.Embed(
+        title=(
+            f"🏆 Gaming Top — {title}"
+        ),
+        colour=(
+            discord.Colour.orange()
+        ),
+    )
+
+    embed.description = "\n".join(
+        leaderboard_lines
+    )
+
+    embed.add_field(
+        name=award_title,
+        value=(
+            f"**{winner_name}**\n"
+            f"🎮 "
+            f"{format_duration(winner_seconds)}\n"
+            f"🏆 {winner_top_game} — "
+            f"{format_duration(winner_top_game_seconds)}"
+        ),
+        inline=False,
+    )
+
+    embed.add_field(
+        name="🍺 Verdict",
+        value=roast,
+        inline=False,
+    )
+
+    embed.set_footer(
+        text=(
+            "Ieși afară. "
+            "Grafica e incredibilă."
         )
+    )
 
-        embed.add_field(
-            name="🍺 AI Verdict",
-            value=roast,
-            inline=False,
-        )
-
-        embed.set_footer(
-            text="Go outside. The graphics are insane."
-        )
-
-        await interaction.followup.send(
-            embed=embed,
-        )
-
-
-async def setup(
-    bot: commands.Bot,
-):
-    await bot.add_cog(
-        TopCommand(bot)
+    await interaction.followup.send(
+        embed=embed,
     )
