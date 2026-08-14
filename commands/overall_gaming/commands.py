@@ -8,7 +8,7 @@ from commands.overall_gaming.limit import (
     handle_limit_show,
 )
 from commands.overall_gaming.playing import handle_playing
-from commands.overall_gaming.stats import handle_stats
+from commands.overall_gaming.gaming_stats import handle_stats
 from commands.overall_gaming.today import handle_today
 from commands.overall_gaming.top import handle_top
 from commands.overall_gaming.week import handle_week
