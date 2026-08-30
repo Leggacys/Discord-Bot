@@ -22,6 +22,59 @@ DEFAULT_PLATFORM = "steam"
 DEFAULT_POLL_MINUTES = 5
 
 
+def log_pubg(
+    message: str,
+) -> None:
+    print(
+        f"[PUBG] {message}",
+        flush=True,
+    )
+
+
+def get_rate_limit_log(
+    response: httpx.Response,
+) -> str:
+    limit = response.headers.get(
+        "X-RateLimit-Limit"
+    )
+    remaining = response.headers.get(
+        "X-RateLimit-Remaining"
+    )
+    reset = response.headers.get(
+        "X-RateLimit-Reset"
+    )
+    retry_after = response.headers.get(
+        "Retry-After"
+    )
+
+    parts = []
+
+    if limit:
+        parts.append(
+            f"limit={limit}"
+        )
+
+    if remaining:
+        parts.append(
+            f"remaining={remaining}"
+        )
+
+    if reset:
+        parts.append(
+            f"reset={reset}"
+        )
+
+    if retry_after:
+        parts.append(
+            f"retry_after={retry_after}s"
+        )
+
+    if not parts:
+        return "rate_limit_headers=none"
+
+    return " ".join(parts)
+
+
 @dataclass(frozen=True)
 class PubgConfig:
     api_key: str
@@ -61,11 +114,16 @@ class PubgApiClient:
                 headers=self.headers,
             )
 
+        log_pubg(
+            "player lookup "
+            f"username={username} status={response.status_code} "
+            f"{get_rate_limit_log(response)}"
+        )
+
         if response.status_code != 200:
-            print(
+            log_pubg(
                 f"PUBG player lookup failed for {username}: "
-                f"{response.status_code}",
-                flush=True,
+                f"{response.status_code}"
             )
             return None
 
@@ -75,7 +133,14 @@ class PubgApiClient:
         )
 
         if not rows:
+            log_pubg(
+                f"player lookup returned no rows username={username}"
+            )
             return None
+
+        log_pubg(
+            f"player lookup resolved username={username} account_id={rows[0]['id']}"
+        )
 
         return rows[0]["id"]
 
@@ -94,11 +159,16 @@ class PubgApiClient:
                 headers=self.headers,
             )
 
+        log_pubg(
+            "recent matches lookup "
+            f"account_id={pubg_account_id} status={response.status_code} "
+            f"{get_rate_limit_log(response)}"
+        )
+
         if response.status_code != 200:
-            print(
+            log_pubg(
                 f"PUBG matches lookup failed for {pubg_account_id}: "
-                f"{response.status_code}",
-                flush=True,
+                f"{response.status_code}"
             )
             return []
 
@@ -110,11 +180,17 @@ class PubgApiClient:
             .get("data", [])
         )
 
-        return [
+        match_ids = [
             match["id"]
             for match in matches
             if match.get("id")
         ]
+
+        log_pubg(
+            f"recent matches found account_id={pubg_account_id} count={len(match_ids)}"
+        )
+
+        return match_ids
 
     async def get_match(
         self,
@@ -131,11 +207,16 @@ class PubgApiClient:
                 headers=self.headers,
             )
 
+        log_pubg(
+            "match lookup "
+            f"match_id={match_id} status={response.status_code} "
+            f"{get_rate_limit_log(response)}"
+        )
+
         if response.status_code != 200:
-            print(
+            log_pubg(
                 f"PUBG match lookup failed for {match_id}: "
-                f"{response.status_code}",
-                flush=True,
+                f"{response.status_code}"
             )
             return None
 
@@ -292,52 +373,111 @@ class PubgMatchPoller:
         )
 
     def start(self) -> None:
+        log_pubg(
+            "poller starting "
+            f"platform={self.config.platform} "
+            f"poll_minutes={self.config.poll_minutes} "
+            f"announcements={'enabled' if self.config.channel_id else 'disabled'}"
+        )
+
         self.poll.start()
 
     @tasks.loop(minutes=DEFAULT_POLL_MINUTES)
     async def poll(self) -> None:
-        accounts = get_active_accounts()
+        try:
+            accounts = get_active_accounts()
+        except Exception as exc:
+            log_pubg(
+                f"poll failed while loading active accounts: {exc}"
+            )
+            return
+
+        log_pubg(
+            f"poll started active_accounts={len(accounts)}"
+        )
+
+        if not accounts:
+            log_pubg(
+                "poll finished no active accounts"
+            )
+            return
 
         for account in accounts:
-            pubg_account_id = account.pubg_account_id
-
-            if not pubg_account_id:
-                pubg_account_id = await self.client.get_player_account_id(
-                    account.username
+            try:
+                await self.poll_account(
+                    account
+                )
+            except Exception as exc:
+                log_pubg(
+                    f"poll account failed username={account.username} error={exc}"
                 )
 
-                if not pubg_account_id:
-                    continue
+        log_pubg(
+            "poll finished"
+        )
 
-                set_pubg_account_id(
-                    account.username,
-                    pubg_account_id,
-                )
+    async def poll_account(
+        self,
+        account,
+    ) -> None:
+        pubg_account_id = account.pubg_account_id
 
-            match_ids = await self.client.get_recent_match_ids(
-                pubg_account_id
+        log_pubg(
+            f"checking account username={account.username} linked={bool(pubg_account_id)}"
+        )
+
+        if not pubg_account_id:
+            pubg_account_id = await self.client.get_player_account_id(
+                account.username
             )
 
-            for match_id in match_ids:
-                if has_player_match_stat(
-                    match_id,
-                    pubg_account_id,
-                ):
-                    continue
-
-                match_data = await self.client.get_match(
-                    match_id
+            if not pubg_account_id:
+                log_pubg(
+                    f"skipping username={account.username} reason=player_not_found"
                 )
+                return
 
-                if not match_data:
-                    continue
+            set_pubg_account_id(
+                account.username,
+                pubg_account_id,
+            )
 
-                await self.process_match(
-                    match_data=match_data,
-                    match_id=match_id,
-                    pubg_account_id=pubg_account_id,
-                    tracked_after=account.created_at,
-                )
+            log_pubg(
+                f"stored account id username={account.username} account_id={pubg_account_id}"
+            )
+
+        match_ids = await self.client.get_recent_match_ids(
+            pubg_account_id
+        )
+
+        skipped_existing = 0
+
+        for match_id in match_ids:
+            if has_player_match_stat(
+                match_id,
+                pubg_account_id,
+            ):
+                skipped_existing += 1
+                continue
+
+            match_data = await self.client.get_match(
+                match_id
+            )
+
+            if not match_data:
+                continue
+
+            await self.process_match(
+                match_data=match_data,
+                match_id=match_id,
+                pubg_account_id=pubg_account_id,
+                tracked_after=account.created_at,
+            )
+
+        log_pubg(
+            f"account finished username={account.username} "
+            f"matches_seen={len(match_ids)} skipped_existing={skipped_existing}"
+        )
 
     @poll.before_loop
     async def before_poll(self) -> None:
@@ -361,9 +501,17 @@ class PubgMatchPoller:
         )
 
         if played_at is None:
+            log_pubg(
+                f"match skipped match_id={match_id} reason=missing_created_at"
+            )
             return
 
         if normalize_datetime(played_at) < normalize_datetime(tracked_after):
+            log_pubg(
+                f"match skipped match_id={match_id} reason=before_tracking_start "
+                f"played_at={normalize_datetime(played_at).isoformat()} "
+                f"tracked_after={normalize_datetime(tracked_after).isoformat()}"
+            )
             return
 
         participant_stats = find_participant(
@@ -372,6 +520,9 @@ class PubgMatchPoller:
         )
 
         if not participant_stats:
+            log_pubg(
+                f"match skipped match_id={match_id} reason=participant_not_found"
+            )
             return
 
         previous_longest = get_best_longest_kill_before(
@@ -394,7 +545,16 @@ class PubgMatchPoller:
         )
 
         if stat is None:
+            log_pubg(
+                f"match skipped match_id={match_id} reason=not_saveable_or_duplicate"
+            )
             return
+
+        log_pubg(
+            f"match saved match_id={match_id} username={stat.username} "
+            f"place={stat.win_place} kills={stat.kills} "
+            f"damage={stat.damage_dealt:.0f} longest_kill={stat.longest_kill:.1f}"
+        )
 
         if stat.win_place == 1:
             await self.send_announcement(
@@ -418,6 +578,9 @@ class PubgMatchPoller:
         title: str,
     ) -> None:
         if not self.config.channel_id:
+            log_pubg(
+                f"announcement skipped event={event_type} reason=no_channel_config"
+            )
             return
 
         channel = self.bot.get_channel(
@@ -425,6 +588,10 @@ class PubgMatchPoller:
         )
 
         if channel is None:
+            log_pubg(
+                f"announcement skipped event={event_type} "
+                f"reason=channel_not_found channel_id={self.config.channel_id}"
+            )
             return
 
         announcement = create_announcement(
@@ -434,6 +601,10 @@ class PubgMatchPoller:
         )
 
         if announcement is None:
+            log_pubg(
+                f"announcement skipped event={event_type} "
+                f"match_id={stat.match_id} reason=already_created"
+            )
             return
 
         embed = build_pubg_announcement_embed(
@@ -448,4 +619,9 @@ class PubgMatchPoller:
 
         mark_announcement_sent(
             announcement.id
+        )
+
+        log_pubg(
+            f"announcement sent event={event_type} match_id={stat.match_id} "
+            f"username={stat.username}"
         )
